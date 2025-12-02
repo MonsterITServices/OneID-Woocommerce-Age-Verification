@@ -1,0 +1,14 @@
+{
+  "name": "yourname/oneid-woocommerce-integration",
+  "description": "A custom plugin to integrate OneID age verification with WooCommerce.",
+  "type": "wordpress-plugin",
+  "require": {
+    "php": ">=7.4",
+    "jumbojett/openid-connect-php": "^0.9.10"
+  },
+  "autoload": {
+    "psr-4": {
+      "OneIDWoo\\": "src/"
+    }
+  }
+}
