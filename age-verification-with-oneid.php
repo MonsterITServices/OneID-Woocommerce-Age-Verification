@@ -40,12 +40,7 @@ class OneID_Woo_Integration {
 
         // WooCommerce checkout hooks
         add_action('woocommerce_before_checkout_form', [$this, 'show_verification_ui']);
-        
-        // --- UPDATED IN v1.5 ---
-        // We are reverting to the safer "block and error" method.
-        // This will no longer conflict with payment gateways.
         add_action('woocommerce_checkout_process', [$this, 'block_checkout_for_verification'], 10);
-        // -----------------------
         
         // Admin Settings
         add_action('admin_menu', [$this, 'add_admin_menu']);
@@ -141,8 +136,10 @@ class OneID_Woo_Integration {
                 $age_over_18_claim = $oidc->requestUserInfo('age_over_18');
 
                 if ($age_over_18_claim === true) {
+                    // 1. Set status for this specific session
                     WC()->session->set('oneid_age_verified', 'true');
                     
+                    // 2. IMPORTANT: If user is logged in, save to DATABASE permanently
                     if (is_user_logged_in()) {
                         update_user_meta(get_current_user_id(), 'oneid_age_verified', 'true');
                     }
@@ -164,19 +161,22 @@ class OneID_Woo_Integration {
     }
 
     /**
-     * Helper function to check if the current user is verified,
-     * checking both session and user meta.
+     * Helper function to check if the current user is verified.
+     * Checks Session first, then Database.
      * @return string 'true', 'false', 'error', or 'not_verified'
      */
     private function get_verification_status() {
+        // 1. Check Session (Fastest)
         $session_status = WC()->session->get('oneid_age_verified');
         if ($session_status === 'true' || $session_status === 'false' || $session_status === 'error') {
             return $session_status;
         }
 
+        // 2. Check Database (User Meta) if logged in
         if (is_user_logged_in()) {
             $meta_status = get_user_meta(get_current_user_id(), 'oneid_age_verified', true);
             if ($meta_status === 'true') {
+                // If verified in DB, set the session to true so we don't query DB on every page load
                 WC()->session->set('oneid_age_verified', 'true');
                 return 'true';
             }
@@ -187,8 +187,7 @@ class OneID_Woo_Integration {
 
 
     /**
-     * --- UPDATED IN v1.5 ---
-     * Displays a status message. If an error, links to re-try.
+     * Displays a status message.
      */
     public function show_verification_ui() {
         $status = $this->get_verification_status();
@@ -207,37 +206,26 @@ class OneID_Woo_Integration {
             );
             wc_print_notice($error_message, 'error');
         } else {
-            // Status is 'not_verified'
             wc_print_notice('This order requires age verification. Please complete checkout to verify.', 'notice');
         }
     }
 
     /**
-     * --- UPDATED IN v1.5 ---
-     * This function now blocks the checkout process with a clear error
+     * Blocks the checkout process with a clear error
      * that includes the verification link.
      */
     public function block_checkout_for_verification() {
         $status = $this->get_verification_status();
 
         if ($status !== 'true') {
-            
-            // Create the auth URL
             $auth_url = esc_url(home_url('?oneid-auth-start=1'));
-            
-            // Create a clear, actionable error message
             $error_message = sprintf(
                 'You must verify your age before placing an order. <a href="%s" class="button">Please click here to verify.</a>',
                 $auth_url
             );
-
-            // This stops the checkout and displays the error message.
             wc_add_notice($error_message, 'error');
             return;
         }
-        
-        // If status is 'true', this function does nothing
-        // and checkout proceeds as normal.
     }
 
     // --- All functions below are for the admin settings page (unchanged) ---
@@ -245,8 +233,8 @@ class OneID_Woo_Integration {
     public function add_admin_menu() {
         add_submenu_page(
             'woocommerce',
-            'OneID Age Verification', // Page Title
-            'OneID Age Verification', // Menu Title
+            'OneID Age Verification', 
+            'OneID Age Verification', 
             'manage_options',
             'oneid-woo-settings',
             [$this, 'create_settings_page']
